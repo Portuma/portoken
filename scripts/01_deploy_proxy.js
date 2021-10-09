@@ -1,7 +1,7 @@
 const { ethers, upgrades } = require("hardhat");
 
 async function main () {
-  const factoryContract = await ethers.getContractFactory("PortumaToken");
+  const factoryContract = await ethers.getContractFactory("PorToken");
   const proxyContract = await upgrades.deployProxy(factoryContract);
   await proxyContract.deployed();
   console.log("Proxy Contract deployed to:", proxyContract.address);
