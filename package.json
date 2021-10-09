@@ -1,0 +1,33 @@
+{
+  "name": "portoken",
+  "version": "1.0.0",
+  "description": "Firs In-game Ad Token on Blockchain",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx hardhat test",
+    "size-contracts": "npx hardhat size-contracts",
+    "slither": "slither-check-upgradeability . PorToken"
+  },
+  "keywords": ["portuma", "portoken", "por"],
+  "author": "WeCare Labs",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.0.2",
+    "@nomiclabs/hardhat-etherscan": "^2.1.6",
+    "@nomiclabs/hardhat-waffle": "^2.0.1",
+    "@nomiclabs/hardhat-web3": "^2.0.0",
+    "@openzeppelin/hardhat-upgrades": "^1.10.0",
+    "@openzeppelin/test-helpers": "^0.5.13",
+    "chai": "^4.3.4",
+    "dotenv": "^10.0.0",
+    "ethereum-waffle": "^3.4.0",
+    "ethers": "^5.4.7",
+    "hardhat": "^2.6.4",
+    "hardhat-contract-sizer": "^2.1.1",
+    "hardhat-gas-reporter": "^1.0.4",
+    "web3": "^1.5.3"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts-upgradeable": "^4.3.2"
+  }
+}
