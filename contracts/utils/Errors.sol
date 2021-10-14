@@ -79,3 +79,15 @@ error CannotTransferContractTokens();
 
 /// Requested amount exceeds the total balance of rrequested account
 error AmountExceedsAccountBalance();
+
+/// Reentrancy check on swapping
+error noReentrancyOnSwap();
+
+/// Giving list exceeds the max length
+/// @param maxLength Allowed max length
+error MaxLengthExeeds(uint256 maxLength);
+
+/// giving data lengths are not equal
+/// @param aLength A side length
+/// @param bLength B side length
+error MiismatchLength(uint256 aLength, uint256 bLength);
