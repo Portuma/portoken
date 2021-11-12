@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 import "./interfaces/UniswapInterface.sol";
 import "./libraries/RFIFeeCalculator.sol";
 import "./utils/Errors.sol";
@@ -29,9 +30,6 @@ import "./utils/Errors.sol";
  * sell after 30 days  : %5  (%4 marketing, %0.5 burn, %0.5 RFI) = Slippage Min: 6
  *
  * Ownership will be transfered to a Gnosis Multi Sig Wallet
- *
- *
- * Smart Contract Development by WeCare Labs: https://wecarelabs.org
  */
 
 /// @title PorToken Token
@@ -39,44 +37,47 @@ import "./utils/Errors.sol";
 /// @notice Contract Has first month sell conditions by tiers defining the taken fee
 contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
     using RFIFeeCalculator for uint256;
+    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
+    
+    // structs
+    EnumerableSetUpgradeable.AddressSet internal rewardExcludedList;
+    RFIFeeCalculator.taxTiers internal taxTiers;
+    RFIFeeCalculator.feeData internal feeData;
+    RFIFeeCalculator.transactionFee internal fees;
 
-    uint256 private constant MAX = type(uint256).max;
+    uint256 internal constant MAX = type(uint256).max;
 
-    uint256 private _tTotal;
-    uint256 private _rTotal;
+    uint256 internal _tTotal;
+    uint256 internal _rTotal;
 
-    uint256 private _tFeeTotal;
-    uint256 private _maxTxAmount;
+    uint256 internal _tFeeTotal;
+    uint256 internal _maxTxAmount;
 
-    uint256 private _start_timestamp;
-    address private _marketingWallet;
-    uint256 private _marketingFeeCollected;
-    uint256 private _swapMarketingAtAmount; // = 1 * 10**6 * 10**_decimals;
+    uint256 internal _start_timestamp;
+    address internal _marketingWallet;
+    uint256 internal _marketingFeeCollected;
+    uint256 internal _swapMarketingAtAmount; // = 1 * 10**6 * 10**_decimals;
 
-    IUniswapV2Router02 private uniswapV2Router;
-    address private uniswapV2Pair;
-    bool private tradingIsEnabled;
+    IUniswapV2Router02 internal uniswapV2Router;
+    address internal uniswapV2Pair;
+    bool internal tradingIsEnabled;
 
     // Reflection Owned
-    mapping(address => uint256) private _rOwned;
+    mapping(address => uint256) internal _rOwned;
     // Token Owned
-    mapping(address => uint256) private _tOwned;
+    mapping(address => uint256) internal _tOwned;
     // is address allowed to spend on behalf
-    mapping(address => mapping(address => uint256)) private _allowances;
+    mapping(address => mapping(address => uint256)) internal _allowances;
     // is address excluded from fee taken
-    mapping(address => bool) private _isExcludedFromFee;
+    mapping(address => bool) internal _isExcludedFromFee;
     // is address exluded from Maximum transaction amount
-    mapping(address => bool) private _isExcludedFromMaxTx;
-    // is address exlcuded from reward list?
-    mapping(address => bool) private _isExcluded;
+    mapping(address => bool) internal _isExcludedFromMaxTx;
     // is address Blacklisted?
-    mapping(address => bool) private _isBlacklisted;
+    mapping(address => bool) internal _isBlacklisted;
     // store automatic market maker pairs.
-    mapping (address => bool) private automatedMarketMakerPairs;
-    // to keep excluded length
-    address[] private _excluded;
+    mapping(address => bool) internal automatedMarketMakerPairs;
     // check ıf swap in progress
-    bool private inSwap;
+    bool internal inSwap;
 
     // modifiers
     modifier lockTheSwap {
@@ -86,11 +87,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         _;
         inSwap = false;
     }
-
-    // structs
-    RFIFeeCalculator.taxTiers private taxTiers;
-    RFIFeeCalculator.feeData private feeData;
-    RFIFeeCalculator.transactionFee private fees;
 
     // Events
     event SetAutomatedMarketMakerPair(address indexed pair, bool value);
@@ -156,6 +152,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         _maxTxAmount = _tTotal * 50 / 1e4; //Max Transaction: 50 Milion (0.5%)
         _swapMarketingAtAmount = 1 * 1e6 * 10**decimals();
 
+        /// Standard Fees
         feeData = RFIFeeCalculator.feeData(0.5 * 1e2, 0.5 * 1e2, 4 * 1e2);
 
         taxTiers.time = [24, 504, 720];
@@ -171,11 +168,12 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
         _isExcludedFromMaxTx[owner()] = true;
 
+        rewardExcludedList.add(address(0xdead));
+        rewardExcludedList.add(address(0));
+        rewardExcludedList.add(address(this));
+
+        /// Will be active after presale
         tradingIsEnabled = false;
-        
-        _excludeFromReward(address(0xdead));
-        _excludeFromReward(address(0));
-        _excludeFromReward(address(this));
     }
 
     /***********************************|
@@ -186,7 +184,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     }
 
     function balanceOf(address account) public view virtual override returns (uint256) {
-        if (_isExcluded[account]) return _tOwned[account];
+        if (rewardExcludedList.contains(account)) return _tOwned[account];
+
         return tokenFromReflection(_rOwned[account]);
     }
 
@@ -198,7 +197,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         uint256 accountBalance = balanceOf(account);
         if(amount > accountBalance) revert AmountExceedsAccountBalance();
 
-        bool feeDeducted = _isExcluded[account];
+        bool feeDeducted = rewardExcludedList.contains(account);
         uint256 rAmount = reflectionFromToken(amount, feeDeducted);
         _rTotal -= rAmount;
         _tTotal -= amount;
@@ -219,23 +218,15 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     }
 
     function excludeFromReward(address account) external onlyOwner {
-        if (_isExcluded[account]) revert AccountAlreadyExcludedFromReward(account);
+        if (rewardExcludedList.contains(account)) revert AccountAlreadyExcludedFromReward(account);
 
         _excludeFromReward(account);
     }
 
     function includeInReward(address account) external onlyOwner {
-        if (!_isExcluded[account]) revert AccountAlreadyIncludedInReward(account);
+        if (!rewardExcludedList.contains(account)) revert AccountAlreadyIncludedInReward(account);
 
-        for (uint256 i = 0; i < _excluded.length; i++) {
-            if (_excluded[i] == account) {
-                _excluded[i] = _excluded[_excluded.length - 1];
-                _tOwned[account] = 0;
-                _isExcluded[account] = false;
-                _excluded.pop();
-                break;
-            }
-        }
+        rewardExcludedList.remove(account);
 
         emit IncludeInReward(account);
     }
@@ -347,21 +338,20 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     }
 
     function _setAutomatedMarketMakerPair(address pair, bool value) internal {
-        if (automatedMarketMakerPairs[pair] != value) {
-            automatedMarketMakerPairs[pair] = value;
+        if (automatedMarketMakerPairs[pair] == value) return;
+        
+        automatedMarketMakerPairs[pair] = value;
 
-            _excludeFromReward(pair);
-            emit SetAutomatedMarketMakerPair(pair, value);
-        }
+        _excludeFromReward(pair);
+        emit SetAutomatedMarketMakerPair(pair, value);
     }
 
     function _excludeFromReward(address account) internal {
-        if (!_isExcluded[account]) {
+        if (!rewardExcludedList.contains(account)) {
             if (_rOwned[account] > 0) _tOwned[account] = tokenFromReflection(_rOwned[account]);
 
-            _isExcluded[account] = true;
-            _excluded.push(account);
-            
+            rewardExcludedList.add(account);
+
             emit ExcludeFromReward(account);
         }
     }
@@ -391,7 +381,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     }
 
     function isExcludedFromReward(address account) external view returns (bool) {
-        return _isExcluded[account];
+        return rewardExcludedList.contains(account);
     }
 
     function getBurnFee() external view returns (uint256) {
@@ -414,6 +404,10 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         return tradingIsEnabled;
     }
 
+    function isBlacklisted(address account) external view returns (bool) {
+        return _isBlacklisted[account];
+    } 
+
     function _getRate() internal view returns (uint256) {
         (uint256 rSupply, uint256 tSupply) = _getCurrentSupply();
         
@@ -425,12 +419,18 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         uint256 rSupply = _rTotal;
         uint256 tSupply = _tTotal;
 
-        for (uint256 i = 0; i < _excluded.length; i++) {
-            if (_rOwned[_excluded[i]] > rSupply || _tOwned[_excluded[i]] > tSupply) return (_rTotal, _tTotal);
-            
-            rSupply -= _rOwned[_excluded[i]];
-            tSupply -= _tOwned[_excluded[i]];
-        }
+        uint256 excludedLength = rewardExcludedList.length();
+        uint256 i = 0;
+
+        do {
+            address excludedAddress = rewardExcludedList.at(i);
+            if (_rOwned[excludedAddress] > rSupply || _tOwned[excludedAddress] > tSupply) return (_rTotal, _tTotal);
+
+            rSupply -= _rOwned[excludedAddress];
+            tSupply -= _tOwned[excludedAddress];
+
+            i += 1;
+        } while (i < excludedLength); // less Gas usage than for and while
 
         if (rSupply < _rTotal /_tTotal) return (_rTotal, _tTotal);
 
@@ -463,6 +463,29 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     |        Transfer Functions         |
     |__________________________________*/
     function _transfer(address sender, address recipient, uint256 amount) internal virtual override {
+        _beforeTokenTransfer(sender, recipient, amount);
+
+        _validateTransfer(sender, recipient, amount);
+
+        // if any account belongs to _isExcludedFromFee account then remove the fee
+        bool takeFee = true;
+        if (_isExcludedFromFee[sender] || _isExcludedFromFee[recipient]) takeFee = false;
+
+        bool isSell = false;
+        if (sender != address(uniswapV2Router) && automatedMarketMakerPairs[recipient] && takeFee) isSell = true;
+
+        _tokenTransfer(sender, recipient, amount, takeFee, isSell);
+
+        uint256 _swapMarketingFeeCollected = _marketingFeeCollected;
+        if (_swapMarketingFeeCollected >= _swapMarketingAtAmount && !inSwap && !automatedMarketMakerPairs[sender]) {
+            swapAndSendTokensForMarketing(_swapMarketingAtAmount);
+        }
+
+        _afterTokenTransfer(sender, recipient, amount);
+    }
+
+    /// Validate Transaction Data
+    function _validateTransfer(address sender, address recipient, uint256 amount) internal view {
         if (sender == address(0) || recipient == address(0)) revert SenderOrRecipientAddressIsZero(sender, recipient);
         if (_isBlacklisted[sender] || _isBlacklisted[recipient]) revert SenderOrRecipientBlacklisted(sender, recipient);
         if (amount <= 0) revert AmountIsZero();
@@ -474,23 +497,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
         uint256 curentSenderBalance = balanceOf(sender);
         if (amount > curentSenderBalance) revert InsufficientBalance(curentSenderBalance, amount);
-
-        _beforeTokenTransfer(sender, recipient, amount);
-
-        //if any account belongs to _isExcludedFromFee account then remove the fee
-        bool takeFee = true;
-        if (_isExcludedFromFee[sender] || _isExcludedFromFee[recipient]) takeFee = false;
-        bool isSell = false;
-        if (sender != address(uniswapV2Router) && automatedMarketMakerPairs[recipient] && takeFee) isSell = true;
-
-        _tokenTransfer(sender, recipient, amount, takeFee, isSell);
-
-        uint256 _swapMarketingFeeCollected = _marketingFeeCollected;
-        if (_marketingWallet > address(0) && _swapMarketingFeeCollected >= _swapMarketingAtAmount && !inSwap && !automatedMarketMakerPairs[sender]) {
-            swapAndSendTokensForMarketing(_swapMarketingAtAmount);
-        }
-
-        _afterTokenTransfer(sender, recipient, amount);
     }
 
     function _tokenTransfer(address sender, address recipient, uint256 amount, bool takeFee, bool isSell) internal {
@@ -530,15 +536,15 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         _rOwned[sender] -= f.rAmount;
         _rOwned[recipient] += f.rTransferAmount;
 
-        if (_isExcluded[sender]) _tOwned[sender] -= f.tAmount;
-        if (_isExcluded[recipient]) _tOwned[recipient] += f.tTransferAmount;
+        if (rewardExcludedList.contains(sender)) _tOwned[sender] -= f.tAmount;
+        if (rewardExcludedList.contains(recipient)) _tOwned[recipient] += f.tTransferAmount;
     }
 
     function _takeTransactionFee(address to, uint256 tAmount, uint256 currentRate) internal {
         uint256 rAmount = tAmount * currentRate;
         _rOwned[to] += rAmount;
 
-        if (_isExcluded[to]) _tOwned[to] += tAmount;
+        if (rewardExcludedList.contains(to)) _tOwned[to] += tAmount;
     }
 
     function _reflectTotal(uint256 rFee, uint256 tFee) internal {
@@ -550,6 +556,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     |            External Calls         |
     |__________________________________*/
     function swapAndSendTokensForMarketing(uint256 tokenAmount) internal lockTheSwap {
+        if (_marketingWallet == address(0)) return;
+
         if (tokenAmount > _marketingFeeCollected) {
             tokenAmount = _marketingFeeCollected;
         }
@@ -588,10 +596,10 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     }
 
     function multiTransfer(address from, address[] calldata addresses, uint256[] calldata tokens) external onlyOwner {
-        uint256 addrLength = addresses.length ;
+        uint256 addrLength = addresses.length;
         uint256 tokenLength = tokens.length;
         if (addrLength > 750) revert MaxLengthExeeds(750);
-        if (addrLength != tokenLength) revert MiismatchLength(addrLength, tokenLength);
+        if (addrLength != tokenLength) revert MismatchLength(addrLength, tokenLength);
 
         uint256 senderBalance = balanceOf(from);
         uint256 totalToken = 0;

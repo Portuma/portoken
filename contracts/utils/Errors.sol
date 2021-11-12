@@ -90,4 +90,4 @@ error MaxLengthExeeds(uint256 maxLength);
 /// giving data lengths are not equal
 /// @param aLength A side length
 /// @param bLength B side length
-error MiismatchLength(uint256 aLength, uint256 bLength);
+error MismatchLength(uint256 aLength, uint256 bLength);

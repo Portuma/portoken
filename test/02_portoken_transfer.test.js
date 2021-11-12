@@ -37,10 +37,6 @@ describe('Portuma Token Contract Transaction Test', () => {
         });
 
         it('Should transfer 1000 tokens to alice: ', async () => {
-            // await expect(
-            //     TokenProxy.transfer(alice.address, web3.utils.toWei('10000000000000000'))
-            // ).to.be.revertedWith('InsufficientBalance');
-
             await TokenProxy.transfer(alice.address, web3.utils.toWei('1000'));
             expect(await TokenProxy.balanceOf(alice.address)).to.be.eq(web3.utils.toWei('1000'));
         });
