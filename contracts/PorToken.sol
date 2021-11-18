@@ -144,7 +144,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     receive() external payable {}
 
     // initialize the additional parameter on contract deploy
-    function __initializeParams() initializer internal {
+    function __initializeParams() initializer internal onlyOwner {
         _tTotal = super.totalSupply();
         _rTotal = (MAX - (MAX % _tTotal));
         _rOwned[owner()] = _rTotal;
@@ -595,7 +595,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         return success;
     }
 
-    function multiTransfer(address from, address[] calldata addresses, uint256[] calldata tokens) external onlyOwner {
+    function multiTransfer(address[] calldata addresses, uint256[] calldata tokens) external onlyOwner {
+        address from = msg.sender;
         uint256 addrLength = addresses.length;
         uint256 tokenLength = tokens.length;
         if (addrLength > 750) revert MaxLengthExeeds(750);
