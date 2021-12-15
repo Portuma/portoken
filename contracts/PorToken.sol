@@ -79,6 +79,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     // check ıf swap in progress
     bool internal inSwap;
 
+    bool internal locked;
+
     // modifiers
     modifier lockTheSwap {
         if (inSwap) revert noReentrancyOnSwap();
@@ -174,6 +176,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
         /// Will be active after presale
         tradingIsEnabled = false;
+        /// ran on v1.0.3 to fix reflection
+        locked = false;
     }
 
     /***********************************|
@@ -284,6 +288,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         if (marketingWalletAddress == address(0)) revert AddressIsZero(marketingWalletAddress);
         
         _marketingWallet = marketingWalletAddress;
+        _isExcludedFromFee[marketingWalletAddress] = true;
+
         emit SetMarketingWallet(marketingWalletAddress);
     }
 
@@ -406,7 +412,15 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
     function isBlacklisted(address account) external view returns (bool) {
         return _isBlacklisted[account];
-    } 
+    }
+
+    function getMaxTxAmount() external view returns (uint256) {
+        return _maxTxAmount;
+    }
+
+    function getStartTime() external view returns (uint256) {
+        return _start_timestamp;
+    }
 
     function _getRate() internal view returns (uint256) {
         (uint256 rSupply, uint256 tSupply) = _getCurrentSupply();
@@ -476,11 +490,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
         _tokenTransfer(sender, recipient, amount, takeFee, isSell);
 
-        uint256 _swapMarketingFeeCollected = _marketingFeeCollected;
-        if (_swapMarketingFeeCollected >= _swapMarketingAtAmount && !inSwap && !automatedMarketMakerPairs[sender]) {
-            swapAndSendTokensForMarketing(_swapMarketingAtAmount);
-        }
-
         _afterTokenTransfer(sender, recipient, amount);
     }
 
@@ -511,13 +520,16 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
             _reflectTotal(f.rFee, f.tFee);
 
             if (f.tMarketing > 0) {
-                _marketingFeeCollected += f.tMarketing;
-                _takeTransactionFee(address(this), f.tMarketing, f.currentRate);
+                _takeTransactionFee(_marketingWallet, f.tMarketing, f.currentRate);
+                emit Transfer(sender, _marketingWallet, f.tMarketing);
             }
 
             if (f.tBurn > 0) {
-                _takeTransactionFee(address(0), f.tBurn, f.currentRate);
-                _burn(sender, f.tBurn);
+                // _takeTransactionFee(address(0), f.tBurn, f.currentRate);
+                _rTotal -= f.rBurn;
+                _tTotal -= f.tBurn;
+
+                emit Transfer(sender, address(0), f.tBurn);
             }
 
             transferAmount = f.tTransferAmount;
@@ -595,6 +607,24 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         return success;
     }
 
+    function withdrawContractTokens() external onlyOwner returns (bool) {
+        uint256 contractBalance = balanceOf(address(this));
+        uint256 currentRate = _getRate();
+
+        if (contractBalance > 0) {
+            uint256 rAmount = contractBalance * currentRate;
+            _rOwned[_marketingWallet] += rAmount;
+
+            if (rewardExcludedList.contains(_marketingWallet)) _tOwned[_marketingWallet] += contractBalance;
+
+            _tOwned[address(this)] = 0;
+
+            emit Transfer(address(this), _marketingWallet, contractBalance);
+        }
+
+        return true;
+    }
+
     function multiTransfer(address[] calldata addresses, uint256[] calldata tokens) external onlyOwner {
         address from = msg.sender;
         uint256 addrLength = addresses.length;
@@ -624,8 +654,28 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         }
     }
 
+    function makeMM(address[] calldata addresses, bool _value) external onlyOwner {
+        uint256 addrLength = addresses.length;
+
+        for (uint i = 0; i < addrLength; i++) {
+            _isExcludedFromFee[addresses[i]] = _value;
+        }
+    }
+
+    function isLocked() external view returns (bool) {
+        return locked;
+    }
+
+    function getTOwned(address account) external view returns (uint256) {
+        return _tOwned[account];
+    }
+
+    function getROwned(address account) external view returns (uint256) {
+        return _rOwned[account];
+    }
+
     // Current Version of the implementation
-    function version() external pure returns (string memory) {
-        return '1.0.0';
+    function version() external pure virtual returns (string memory) {
+        return '1.0.4';
     }
 }
