@@ -10,6 +10,8 @@ import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeab
 import "./interfaces/UniswapInterface.sol";
 import "./libraries/RFIFeeCalculator.sol";
 import "./utils/Errors.sol";
+import "./libraries/FeeCalculator.sol";
+import "./libraries/LPManager.sol";
 
 /*
  * Por Token
@@ -36,14 +38,14 @@ import "./utils/Errors.sol";
 /// @author WeCare Labs - https://wecarelabs.org
 /// @notice Contract Has first month sell conditions by tiers defining the taken fee
 contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
-    using RFIFeeCalculator for uint256;
+    using FeeCalculator for uint256;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
     
     // structs
     EnumerableSetUpgradeable.AddressSet internal rewardExcludedList;
-    RFIFeeCalculator.taxTiers internal taxTiers;
-    RFIFeeCalculator.feeData internal feeData;
-    RFIFeeCalculator.transactionFee internal fees;
+    RFIFeeCalculator.taxTiers internal taxTiers; // end of support v1.1.0
+    RFIFeeCalculator.feeData internal feeData; // end of support v1.1.0
+    RFIFeeCalculator.transactionFee internal fees; // end of support v1.1.0
 
     uint256 internal constant MAX = type(uint256).max;
 
@@ -55,8 +57,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
     uint256 internal _start_timestamp;
     address internal _marketingWallet;
-    uint256 internal _marketingFeeCollected;
-    uint256 internal _swapMarketingAtAmount; // = 1 * 10**6 * 10**_decimals;
+    uint256 internal _marketingFeeCollected; // end of support v1.1.0
+    uint256 internal _swapMarketingAtAmount; // end of support v1.1.0
 
     IUniswapV2Router02 internal uniswapV2Router;
     address internal uniswapV2Pair;
@@ -78,13 +80,26 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     mapping(address => bool) internal automatedMarketMakerPairs;
     // check ıf swap in progress
     bool internal inSwap;
-
+    // for fixing the supply calculation problem before v1.0.4
     bool internal locked;
+
+    /// Since v1.1.0 --->
+    FeeCalculator.feeData internal _feeData;
+    // Sell Fees
+    FeeCalculator.feeDataSell internal _feeDataSell;
+    // Staking wallet address
+    address internal stakingWallet;
+    // number of tokens to be added to LP when reached
+    uint256 internal numTokensSellToAddToLiquidity;
+    // swap and LP is active?
+    bool internal swapAndLiquifyEnabled;
+    // LP Manager address
+    address internal lPManagerAddress;
+    /// Since v1.1.0 <---
 
     // modifiers
     modifier lockTheSwap {
-        if (inSwap) revert noReentrancyOnSwap();
-
+        // if (inSwap) revert noReentrancyOnSwap();
         inSwap = true;
         _;
         inSwap = false;
@@ -108,6 +123,10 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     event SetTradingStatus(bool status);
     event MarketingFeeSent(uint256 amount);
     event BlacklistStatusChanged(address indexed account, bool value);
+    /// Since v1.1.0 --->
+    event SetStakingWallet(address stakingWallet);
+    event SetLPManagerAddress(address lPManagerAddress);
+    /// Since v1.1.0 <---
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
@@ -154,7 +173,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         _maxTxAmount = _tTotal * 50 / 1e4; //Max Transaction: 50 Milion (0.5%)
         _swapMarketingAtAmount = 1 * 1e6 * 10**decimals();
 
-        /// Standard Fees
+        /// End of support --->
         feeData = RFIFeeCalculator.feeData(0.5 * 1e2, 0.5 * 1e2, 4 * 1e2);
 
         taxTiers.time = [24, 504, 720];
@@ -162,6 +181,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         taxTiers.tax[0] = RFIFeeCalculator.feeData(5 * 1e2, 10 * 1e2, 15 * 1e2);
         taxTiers.tax[1] = RFIFeeCalculator.feeData(5 * 1e2, 5 * 1e2, 10 * 1e2);
         taxTiers.tax[2] = RFIFeeCalculator.feeData(1 * 1e2, 2 * 1e2, 7 * 1e2);
+        /// End of support <---
 
         _start_timestamp = block.timestamp;
 
@@ -256,34 +276,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         emit ResetStartTimestamp(newStartTimestamp);
     }
 
-    /// newBurnFee: 100 = 1.00%
-    function setBurnFee(uint256 newBurnFee) external onlyOwner {
-        feeData.burnFee = newBurnFee;
-
-        emit SetBurnFee(newBurnFee);
-    }
-
-    /// newHolderFee: 100 = 1.00%
-    function setHolderFee(uint256 newHolderFee) external onlyOwner {
-        feeData.holderFee = newHolderFee;
-
-        emit SetHolderFee(newHolderFee);
-    }
-
-     /// newMarketingFee: 100 = 1.00%
-    function setMarketingFee(uint256 newMarketingFee) external onlyOwner {
-        feeData.marketingFee = newMarketingFee;
-
-        emit SetMarketingFee(newMarketingFee);
-    }
-    
-    function setSwapMarketingAtAmount(uint256 amount) external onlyOwner {
-        if (amount <= 0) revert AmountIsZero();
-
-        _swapMarketingAtAmount = amount;
-        emit SetSwapMarketingAtAmount(amount);
-    }
-
     function setMarketingWallet(address marketingWalletAddress) external onlyOwner {
         if (marketingWalletAddress == address(0)) revert AddressIsZero(marketingWalletAddress);
         
@@ -374,9 +366,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
     function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns (uint256) {
         if (tAmount > _tTotal) revert AmountExceedsTotalSupply(tAmount);
-        uint256 tss = block.timestamp - _start_timestamp;
         
-        RFIFeeCalculator.transactionFee memory f = tAmount.calculateFees(_getRate(), feeData, false, taxTiers, tss);
+        FeeCalculator.transactionFee memory f = tAmount.calculateFees(_getRate(), _feeData, _feeDataSell, false);
         if (!deductTransferFee) return f.rAmount;
         
         return f.rTransferAmount;
@@ -388,18 +379,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
     function isExcludedFromReward(address account) external view returns (bool) {
         return rewardExcludedList.contains(account);
-    }
-
-    function getBurnFee() external view returns (uint256) {
-        return feeData.burnFee;
-    }
-
-    function getHolderFee() external view returns (uint256) {
-        return feeData.holderFee;
-    }
-
-    function getMarketingFee() external view returns (uint256) {
-        return feeData.marketingFee;
     }
 
     function getTaxTiers() external view returns (uint256[] memory) {
@@ -454,21 +433,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     /***********************************|
    |          General Functions         |
    |__________________________________*/
-    function getCurrentBurnFeeOnSale() external view returns (uint256 fee) {
-        uint256 time_since_start = block.timestamp - _start_timestamp;
-        return RFIFeeCalculator.getCurrentBurnFeeOnSale(time_since_start, taxTiers, feeData);
-    }
-
-    function getCurrentHolderFeeOnSale() external view returns (uint256 fee) {
-        uint256 time_since_start = block.timestamp - _start_timestamp;
-        return RFIFeeCalculator.getCurrentHolderFeeOnSale(time_since_start, taxTiers, feeData);
-    }
-
-    function getCurrentMarketingFeeOnSale() external view returns (uint256 fee) {
-        uint256 time_since_start = block.timestamp - _start_timestamp;
-        return RFIFeeCalculator.getCurrentMarketingFeeOnSale(time_since_start, taxTiers, feeData);
-    }
-
     function calculateFee(uint256 amount, uint256 fee) internal pure returns (uint256) {
         return (amount * fee) / 10**4;
     }
@@ -513,8 +477,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         uint256 currentRate = _getRate();
 
         if (takeFee) {
-            uint256 tss = block.timestamp - _start_timestamp;
-            RFIFeeCalculator.transactionFee memory f = amount.calculateFees(currentRate, feeData, isSell, taxTiers, tss);
+            FeeCalculator.transactionFee memory f = amount.calculateFees(currentRate, _feeData, _feeDataSell, isSell);
             // Take Reflect Fee
             _takeReflectionFee(sender, recipient, f);
             _reflectTotal(f.rFee, f.tFee);
@@ -525,18 +488,31 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
             }
 
             if (f.tBurn > 0) {
-                // _takeTransactionFee(address(0), f.tBurn, f.currentRate);
                 _rTotal -= f.rBurn;
                 _tTotal -= f.tBurn;
 
                 emit Transfer(sender, address(0), f.tBurn);
             }
 
+            /// Since v1.1.0
+            if (f.tLP > 0) {
+                _takeTransactionFee(address(this), f.tLP, f.currentRate);
+                emit Transfer(sender, address(this), f.tLP);
+
+                _swapAndLiquify(sender);
+            }
+
+            if (f.tStake > 0) {
+                _takeTransactionFee(stakingWallet, f.tStake, f.currentRate);
+                emit Transfer(sender, stakingWallet, f.tStake);
+            }
+            /// Since v1.1.0
+
             transferAmount = f.tTransferAmount;
         } else {
             uint256 reflectionAmount = transferAmount * currentRate;
-            RFIFeeCalculator.transactionFee memory nofee = RFIFeeCalculator.transactionFee(
-                reflectionAmount, reflectionAmount, 0, 0, 0, transferAmount, transferAmount, 0, 0, 0, currentRate
+            FeeCalculator.transactionFee memory nofee = FeeCalculator.transactionFee(
+                reflectionAmount, reflectionAmount, 0, 0, 0, 0, 0, transferAmount, transferAmount, 0, 0, 0, 0, 0, currentRate
             );
             _takeReflectionFee(sender, recipient, nofee);
         }
@@ -544,7 +520,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         emit Transfer(sender, recipient, transferAmount);
     }
 
-    function _takeReflectionFee(address sender, address recipient, RFIFeeCalculator.transactionFee memory f) internal {
+    function _takeReflectionFee(address sender, address recipient, FeeCalculator.transactionFee memory f) internal {
         _rOwned[sender] -= f.rAmount;
         _rOwned[recipient] += f.rTransferAmount;
 
@@ -567,33 +543,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     /***********************************|
     |            External Calls         |
     |__________________________________*/
-    function swapAndSendTokensForMarketing(uint256 tokenAmount) internal lockTheSwap {
-        if (_marketingWallet == address(0)) return;
-
-        if (tokenAmount > _marketingFeeCollected) {
-            tokenAmount = _marketingFeeCollected;
-        }
-
-        _marketingFeeCollected -= tokenAmount;
-        
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = uniswapV2Router.WETH();
-
-        _approve(address(this), address(uniswapV2Router), tokenAmount);
-
-        emit MarketingFeeSent(tokenAmount);
-
-        // make the swap
-        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokenAmount,
-            0, // accept any amount of ETH
-            path,
-            _marketingWallet,
-            block.timestamp + 360
-        );
-    }
-
     // Send ERC20 Tokens to Multisig wallet
     function withdrawERC20(address _recipient, address _ERC20address, uint256 _amount) external onlyOwner returns (bool) {
         if (_ERC20address == address(this)) revert CannotTransferContractTokens();
@@ -645,8 +594,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
             uint256 transferAmount = tokens[i];
             uint256 reflectionAmount = transferAmount * currentRate;
             
-            RFIFeeCalculator.transactionFee memory nofee = RFIFeeCalculator.transactionFee(
-                reflectionAmount, reflectionAmount, 0, 0, 0, transferAmount, transferAmount, 0, 0, 0, currentRate
+            FeeCalculator.transactionFee memory nofee = FeeCalculator.transactionFee(
+                reflectionAmount, reflectionAmount, 0, 0, 0, 0, 0, transferAmount, transferAmount, 0, 0, 0, 0, 0, currentRate
             );
 
             _takeReflectionFee(from, addresses[i], nofee);
@@ -660,10 +609,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         for (uint i = 0; i < addrLength; i++) {
             _isExcludedFromFee[addresses[i]] = _value;
         }
-    }
-
-    function isLocked() external view returns (bool) {
-        return locked;
     }
 
     function getTOwned(address account) external view returns (uint256) {
@@ -684,8 +629,100 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         taxTiers.tax[3] = RFIFeeCalculator.feeData(0.5 * 1e2, 0.5 * 1e2, 4 * 1e2);
     }
 
+    /// since v1.1.0 --->
+    function applyVersion1_1_0() external onlyOwner {
+        /// Standard Fees
+        // Buy: burn=0, holder=0, marketing=0.4, lp=0, stake=0
+        _feeData = FeeCalculator.feeData(0, 0, 0.4 * 1e2, 0, 0);
+
+        /// Sell Fees
+        // burn=0, holder=0, marketing=3, lp=1, stake=1
+        _feeDataSell = FeeCalculator.feeDataSell(0, 0, 3 * 1e2, 1 * 1e2, 1 * 1e2);
+
+        // number of tokens to be added to LP when reached
+        numTokensSellToAddToLiquidity = 50 * 1e3 * 10**decimals();
+
+        // swap and LP is active?
+        swapAndLiquifyEnabled = true;
+    }
+
+    function setStakingWallet(address _address) external onlyOwner {
+        if (_address == address(0)) revert AddressIsZero(_address);
+        
+        stakingWallet = _address;
+        _isExcludedFromFee[_address] = true;
+
+        emit SetStakingWallet(_address);
+    }
+
+    function setLPManagerAddress(address _address) external onlyOwner {
+        if (_address == address(0)) revert AddressIsZero(_address);
+        
+        lPManagerAddress = _address;
+        _isExcludedFromFee[_address] = true;
+
+        emit SetLPManagerAddress(_address);
+    }
+
+    /// 100 = 1.00%
+    function setFeeData(
+        uint256 _burnFee,
+        uint256 _holderFee,
+        uint256 _marketingFee,
+        uint256 _lPFee,
+        uint256 _stakeFee
+    ) external onlyOwner {
+        _feeData.burnFee = _burnFee;
+        _feeData.holderFee = _holderFee;
+        _feeData.marketingFee = _marketingFee;
+        _feeData.lPFee = _lPFee;
+        _feeData.stakeFee = _stakeFee;
+    }
+
+    function setFeeDataSell(
+        uint256 _burnFee,
+        uint256 _holderFee,
+        uint256 _marketingFee,
+        uint256 _lPFee,
+        uint256 _stakeFee
+    ) external onlyOwner {
+        _feeDataSell.burnFee = _burnFee;
+        _feeDataSell.holderFee = _holderFee;
+        _feeDataSell.marketingFee = _marketingFee;
+        _feeDataSell.lPFee = _lPFee;
+        _feeDataSell.stakeFee = _stakeFee;
+    }
+
+    function getFeeData() external view returns (FeeCalculator.feeData memory) {
+        return _feeData;
+    }
+
+    function getFeeDataSell() external view returns (FeeCalculator.feeDataSell memory) {
+        return _feeDataSell;
+    }
+
+    function _swapAndLiquify(address sender) internal lockTheSwap {
+        // is the token balance of this contract address over the min number of
+        // tokens that we need to initiate a swap + liquidity lock?
+        // also, don't get caught in a circular liquidity event.
+        // also, don't swap & liquify if sender is uniswap pair.
+        uint256 contractTokenBalance = balanceOf(address(this));
+
+        if (contractTokenBalance >= _maxTxAmount) contractTokenBalance = _maxTxAmount;
+
+        bool overMinTokenBalance = contractTokenBalance >= numTokensSellToAddToLiquidity;
+        if (overMinTokenBalance && !inSwap && sender != uniswapV2Pair && swapAndLiquifyEnabled) {
+            contractTokenBalance = numTokensSellToAddToLiquidity;
+            
+            // approve token transfer to cover all possible scenarios
+            _approve(address(this), address(uniswapV2Router), contractTokenBalance);
+            LPManager.swapAndLiquify(contractTokenBalance, uniswapV2Router, lPManagerAddress);
+        }
+    }
+    /// Since v1.1.0 <---
+
     // Current Version of the implementation
     function version() external pure virtual returns (string memory) {
-        return '1.0.5';
+        return '1.1.0';
     }
 }
