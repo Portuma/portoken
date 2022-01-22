@@ -1,7 +1,7 @@
 const { upgrades } = require("hardhat");
 
 async function main () {
-    const gnosisSafe = ''; // Wallet address
+    const gnosisSafe = '0x6FE01E7C733320DC7FCC0037272a6ac629DA5964'; // Wallet address
   
     console.log('Transferring ownership of ProxyAdmin...');
     // The owner of the ProxyAdmin can upgrade our contracts

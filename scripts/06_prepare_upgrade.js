@@ -8,14 +8,13 @@ async function main() {
     const proposal = await defender.proposeUpgrade(
         proxyAddress,
         factoryContract,
-        {
-            kind: 'transparent',
-            title: 'Upgrade to V1.0.5 4',
-            description: 'Upgrade to V1.0.5',
-            multisig: '0x6FE01E7C733320DC7FCC0037272a6ac629DA5964',
-            // proxyAdmin: '0x5B2379a3983d6a428153F53E2898250807C6c8a8',
-            // multisigType: 'Gnosis Multisig'
-        }
+        [
+            title = 'Upgrade to V1.0.5',
+            description = 'Upgrade to V1.0.5',
+            // multisig = '0x74D638baa8c073C8528745D0F8fBCB6FCd0fC1a2',
+            proxyAdmin = '0x5B2379a3983d6a428153F53E2898250807C6c8a8',
+            // multisigType = 'Gnosis Multisig'
+        ]
     );
     console.log("Upgrade proposal created at:", proposal.url);
 }
