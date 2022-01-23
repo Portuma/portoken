@@ -1,7 +1,8 @@
 const { ethers, defender } = require("hardhat");
 
 async function main() {
-    const proxyAddress = '0x9b5eDb7Dd25C704eaCA3d8Ae09282CCfDaeFCb63'; // proxy address testnet
+    // const proxyAddress = '0x9b5eDb7Dd25C704eaCA3d8Ae09282CCfDaeFCb63'; // proxy address testnet old
+    const proxyAddress = '0x9853839B8EE7D9F5B379Cd1660a00f1f220d8041'; // proxy address testnet
 
     const factoryContract = await ethers.getContractFactory("PorToken");
     console.log("Preparing proposal...");
@@ -9,11 +10,11 @@ async function main() {
         proxyAddress,
         factoryContract,
         {
-            kind: 'transparent',
-            title: 'Upgrade to V1.0.5 4',
-            description: 'Upgrade to V1.0.5',
-            multisig: '0x6FE01E7C733320DC7FCC0037272a6ac629DA5964',
-            // proxyAdmin: '0x5B2379a3983d6a428153F53E2898250807C6c8a8',
+            // kind: 'transparent',
+            title: 'Upgrade to V1.0.6',
+            description: 'Upgrade to V1.0.6',
+            multisig: '0x74D638baa8c073C8528745D0F8fBCB6FCd0fC1a2',
+            // proxyAdmin: '',
             // multisigType: 'Gnosis Multisig'
         }
     );

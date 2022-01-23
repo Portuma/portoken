@@ -306,20 +306,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         _setAutomatedMarketMakerPair(pair, value);
     }
 
-    // function createETHSwapPair(address _routerAddress) external onlyOwner {
-    //     if (uniswapV2Pair > address(0)) revert PairAlreadySet(uniswapV2Pair);
-    //     if (_routerAddress == address(0)) revert AddressIsZero(_routerAddress);
-
-    //     IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(_routerAddress);        
-    //     uniswapV2Router = _uniswapV2Router;
-    //     _excludeFromReward(_routerAddress);
-
-    //     uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory()).createPair(address(this), _uniswapV2Router.WETH());
-    //     _setAutomatedMarketMakerPair(uniswapV2Pair, true);
-
-    //     emit CreateETHSwapPair(_routerAddress);
-    // }
-
     function setUniswapRouter(address _addr) external onlyOwner {
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(_addr);
         uniswapV2Router = _uniswapV2Router;
@@ -535,7 +521,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
             }
 
             if (f.tBurn > 0) {
-                // _takeTransactionFee(address(0), f.tBurn, f.currentRate);
                 _rTotal -= f.rBurn;
                 _tTotal -= f.tBurn;
 
@@ -577,33 +562,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     /***********************************|
     |            External Calls         |
     |__________________________________*/
-    // function swapAndSendTokensForMarketing(uint256 tokenAmount) internal lockTheSwap {
-    //     if (_marketingWallet == address(0)) return;
-
-    //     if (tokenAmount > _marketingFeeCollected) {
-    //         tokenAmount = _marketingFeeCollected;
-    //     }
-
-    //     _marketingFeeCollected -= tokenAmount;
-        
-    //     address[] memory path = new address[](2);
-    //     path[0] = address(this);
-    //     path[1] = uniswapV2Router.WETH();
-
-    //     _approve(address(this), address(uniswapV2Router), tokenAmount);
-
-    //     emit MarketingFeeSent(tokenAmount);
-
-    //     // make the swap
-    //     uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
-    //         tokenAmount,
-    //         0, // accept any amount of ETH
-    //         path,
-    //         _marketingWallet,
-    //         block.timestamp + 360
-    //     );
-    // }
-
     // Send ERC20 Tokens to Multisig wallet
     function withdrawERC20(address _recipient, address _ERC20address, uint256 _amount) external onlyOwner returns (bool) {
         if (_ERC20address == address(this)) revert CannotTransferContractTokens();
@@ -704,6 +662,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
     // Current Version of the implementation
     function version() external pure virtual returns (string memory) {
-        return '1.0.5';
+        return '1.0.6';
     }
 }
