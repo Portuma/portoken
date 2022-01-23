@@ -674,8 +674,18 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         return _rOwned[account];
     }
 
+    /// since 1.0.5
+    /// added for extending and seperating the buy and sell fees
+    /// until new fee system applied
+    function extendSellFeePeriod() external onlyOwner {
+        // 24 = 1 day, 168 = 7 days, 504 = 21 days, 720 = 30 days, 1440 = 60 days
+        taxTiers.time = [24, 504, 720, 1440];
+
+        taxTiers.tax[3] = RFIFeeCalculator.feeData(0.5 * 1e2, 0.5 * 1e2, 4 * 1e2);
+    }
+
     // Current Version of the implementation
     function version() external pure virtual returns (string memory) {
-        return '1.0.4';
+        return '1.0.5';
     }
 }

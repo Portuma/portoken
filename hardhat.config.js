@@ -48,6 +48,11 @@ module.exports = {
       chainId: 97,
       accounts: [`0x${process.env.PRIVATE_KEY}`]
     },
+    bsc_mainnet: {
+      url: "https://bsc-dataseed.binance.org",
+      chainId: 56,
+      accounts: [`0x${process.env.PRIVATE_KEY}`]
+    },
   },
   mocha: {
     timeout: 20000

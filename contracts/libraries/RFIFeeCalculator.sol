@@ -75,6 +75,8 @@ library RFIFeeCalculator {
             fee = tt.tax[1].burnFee;
         } else if (time_since_start < tt.time[2] * HOUR) {
             fee = tt.tax[2].burnFee;
+        } else if (time_since_start < tt.time[3] * HOUR) {
+            fee = tt.tax[3].burnFee;
         }
     }
 
@@ -90,6 +92,8 @@ library RFIFeeCalculator {
             fee = tt.tax[1].holderFee;
         } else if (time_since_start < tt.time[2] * HOUR) {
             fee = tt.tax[2].holderFee;
+        } else if (time_since_start < tt.time[3] * HOUR) {
+            fee = tt.tax[3].holderFee;
         }
     }
 
@@ -104,7 +108,9 @@ library RFIFeeCalculator {
         } else if (time_since_start < tt.time[1] * HOUR) {
             fee = tt.tax[1].marketingFee;
         } else if (time_since_start < tt.time[2] * HOUR) {
-            fee =  tt.tax[2].marketingFee;
+            fee = tt.tax[2].marketingFee;
+        } else if (time_since_start < tt.time[3] * HOUR) {
+            fee = tt.tax[3].marketingFee;
         }
     }
 }
