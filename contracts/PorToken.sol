@@ -572,9 +572,9 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         return isSent;
     }
 
-    // Send Contract BNB/ETH Balance to Multisig wallet
+    // Send Contract BNB/ETH Balance to Marketing wallet
     function transferBalance() external onlyOwner returns (bool) {
-        (bool success,) = owner().call{value: address(this).balance}("");
+        (bool success,) = address(_marketingWallet).call{value: address(this).balance}("");
         
         emit TransferBalance(success);
 
@@ -654,8 +654,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     /// added for extending and seperating the buy and sell fees
     /// until new fee system applied
     function extendSellFeePeriod() external onlyOwner {
-        // 24 = 1 day, 168 = 7 days, 504 = 21 days, 720 = 30 days, 1440 = 60 days
-        taxTiers.time = [24, 504, 720, 1440];
+        // 24 = 1 day, 168 = 7 days, 504 = 21 days, 720 = 30 days, 1440 = 60 days, 8640 = 360 days
+        taxTiers.time = [24, 504, 720, 8640];
 
         taxTiers.tax[3] = RFIFeeCalculator.feeData(0.5 * 1e2, 0.5 * 1e2, 4 * 1e2);
     }

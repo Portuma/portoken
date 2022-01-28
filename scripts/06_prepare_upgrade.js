@@ -1,4 +1,4 @@
-const { ethers, defender } = require("hardhat");
+const { ethers, upgrades } = require("hardhat");
 
 async function main() {
     // const proxyAddress = '0x9b5eDb7Dd25C704eaCA3d8Ae09282CCfDaeFCb63'; // proxy address testnet old
@@ -7,19 +7,14 @@ async function main() {
 
     const factoryContract = await ethers.getContractFactory("PorToken");
     console.log("Preparing proposal...");
-    const proposal = await defender.proposeUpgrade(
+    const prepare = await upgrades.prepareUpgrade(
         proxyAddress,
         factoryContract,
         {
-            // kind: 'transparent',
-            title: 'Upgrade to V1.0.6',
-            description: 'Upgrade to V1.0.6',
-            multisig: '0xd180f598c281a1B6AEa81Fc7A1268017a7D1EF5E',
-            // proxyAdmin: '',
-            // multisigType: 'Gnosis Multisig'
+            kind: 'transparent'
         }
     );
-    console.log("Upgrade proposal created at:", proposal.url);
+    console.log("Upgrade proposal created at:", prepare);
 }
 
 main()
