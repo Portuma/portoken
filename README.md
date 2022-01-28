@@ -3,12 +3,14 @@
 **First In-Game Ad Token On Blockchain**
 
 - [Project Home Page](https://portoken.com)
-- Designed for Solidity >=0.8.4
-- uses OpenZeppelin UUPS proxy standart
+- Designed for Solidity = 0.8.4
+- uses OpenZeppelin Transparent proxy standart
 - Complementary to [OpenZeppelin Contracts Upgradeable](https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable)
 - Tests with Hardhat and Waffle
 - Managed with OpenZeppelin Defender
-- Ownership will be transferred to [Gnosis Multisig Wallet](https://gnosis-safe.io/)
+- Contract Ownership transferred to [Timelock Controller](https://bscscan.com/address/0x3E69224929B1dE44dD7CF4797eeC7D51E3341e3d)
+- Timelock Controller has only one proposer, which is [Gnosis Multisig Wallet](https://bscscan.com/address/0xd180f598c281a1B6AEa81Fc7A1268017a7D1EF5E)
+- Timelock Controller Ownership is renounced to Timelock Controller itself
 
 ## Installation
 
