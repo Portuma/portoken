@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
@@ -29,7 +29,7 @@ import "./utils/Errors.sol";
  * Sell within 30 days : %10 (%7 marketing, %1 burn, %2 RFI) = Slippage Min: 11
  * sell after 30 days  : %5  (%4 marketing, %0.5 burn, %0.5 RFI) = Slippage Min: 6
  *
- * Ownership will be transfered to a Gnosis Multi Sig Wallet
+ * Ownership will be transferred to a Gnosis Multi Sig Wallet
  */
 
 /// @title PorToken Token
@@ -70,7 +70,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     mapping(address => mapping(address => uint256)) internal _allowances;
     // is address excluded from fee taken
     mapping(address => bool) internal _isExcludedFromFee;
-    // is address exluded from Maximum transaction amount
+    // is address excluded from Maximum transaction amount
     mapping(address => bool) internal _isExcludedFromMaxTx;
     // is address Blacklisted?
     mapping(address => bool) internal _isBlacklisted;
@@ -98,21 +98,29 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     event SetMarketingFee(uint256 newMarketingFee);
     event SetMarketingWallet(address marketingWallet);
     event SetTeamWallet(address teamWalletAddress);
-    event SetSwapMarketingAtAmount(uint256 amount);
+    // event SetSwapMarketingAtAmount(uint256 amount);
     event ExcludeFromReward(address account);
     event IncludeInReward(address account);
-    event CreateETHSwapPair(address routerAddress);
+    // event CreateETHSwapPair(address routerAddress);
     event SetMaxTxAmount(uint256 amount);
     event ExcludeFromFee(address account);
     event IncludeInFee(address account);
     event SetTradingStatus(bool status);
-    event MarketingFeeSent(uint256 amount);
+    // event MarketingFeeSent(uint256 amount);
     event BlacklistStatusChanged(address indexed account, bool value);
+    /// Since v1.0.5
+    event AuthorizeUpgrade(address indexed newImplementation);
+    event InitializeParams();
+    event SetUniswapRouter(address indexed _addr);
+    event SetUniswapPair(address indexed _addr);
+    event WithdrawERC20(address indexed _recipient, address indexed _ERC20address, uint256 _amount, bool isSent);
+    event TransferBalance(bool success);
+    event MakeMM(address indexed addresses, bool _value);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
 
-    function initialize() initializer public {
+    function initialize() initializer external {
         __ERC20_init("Portuma", "POR");
         __ERC20Burnable_init();
         __Pausable_init();
@@ -141,6 +149,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override {
+        emit AuthorizeUpgrade(newImplementation);
     }
 
     receive() external payable {}
@@ -151,7 +160,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         _rTotal = (MAX - (MAX % _tTotal));
         _rOwned[owner()] = _rTotal;
 
-        _maxTxAmount = _tTotal * 50 / 1e4; //Max Transaction: 50 Milion (0.5%)
+        _maxTxAmount = _tTotal * 50 / 1e4; //Max Transaction: 50 Million (0.5%)
         _swapMarketingAtAmount = 1 * 1e6 * 10**decimals();
 
         /// Standard Fees
@@ -178,6 +187,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         tradingIsEnabled = false;
         /// ran on v1.0.3 to fix reflection
         locked = false;
+
+        emit InitializeParams();
     }
 
     /***********************************|
@@ -258,6 +269,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
     /// newBurnFee: 100 = 1.00%
     function setBurnFee(uint256 newBurnFee) external onlyOwner {
+        if (newBurnFee < 500) revert MaxLengthExeeds(500);
         feeData.burnFee = newBurnFee;
 
         emit SetBurnFee(newBurnFee);
@@ -265,6 +277,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
     /// newHolderFee: 100 = 1.00%
     function setHolderFee(uint256 newHolderFee) external onlyOwner {
+        if (newHolderFee < 500) revert MaxLengthExeeds(500);
         feeData.holderFee = newHolderFee;
 
         emit SetHolderFee(newHolderFee);
@@ -272,16 +285,10 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
      /// newMarketingFee: 100 = 1.00%
     function setMarketingFee(uint256 newMarketingFee) external onlyOwner {
+        if (newMarketingFee < 500) revert MaxLengthExeeds(500);
         feeData.marketingFee = newMarketingFee;
 
         emit SetMarketingFee(newMarketingFee);
-    }
-    
-    function setSwapMarketingAtAmount(uint256 amount) external onlyOwner {
-        if (amount <= 0) revert AmountIsZero();
-
-        _swapMarketingAtAmount = amount;
-        emit SetSwapMarketingAtAmount(amount);
     }
 
     function setMarketingWallet(address marketingWalletAddress) external onlyOwner {
@@ -299,24 +306,11 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         _setAutomatedMarketMakerPair(pair, value);
     }
 
-    function createETHSwapPair(address _routerAddress) external onlyOwner {
-        if (uniswapV2Pair > address(0)) revert PairAlreadySet(uniswapV2Pair);
-        if (_routerAddress == address(0)) revert AddressIsZero(_routerAddress);
-
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(_routerAddress);        
-        uniswapV2Router = _uniswapV2Router;
-        _excludeFromReward(_routerAddress);
-
-        uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory()).createPair(address(this), _uniswapV2Router.WETH());
-        _setAutomatedMarketMakerPair(uniswapV2Pair, true);
-
-        emit CreateETHSwapPair(_routerAddress);
-    }
-
     function setUniswapRouter(address _addr) external onlyOwner {
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(_addr);
         uniswapV2Router = _uniswapV2Router;
 
+        emit SetUniswapRouter(_addr);
         _excludeFromReward(_addr);
     }
 
@@ -325,6 +319,8 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         if (uniswapV2Pair == _addr) revert PairAlreadySet(_addr); 
         
         uniswapV2Pair = _addr;
+
+        emit SetUniswapPair(_addr);
         _setAutomatedMarketMakerPair(uniswapV2Pair, true);
     }
 
@@ -525,7 +521,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
             }
 
             if (f.tBurn > 0) {
-                // _takeTransactionFee(address(0), f.tBurn, f.currentRate);
                 _rTotal -= f.rBurn;
                 _tTotal -= f.tBurn;
 
@@ -567,43 +562,22 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
     /***********************************|
     |            External Calls         |
     |__________________________________*/
-    function swapAndSendTokensForMarketing(uint256 tokenAmount) internal lockTheSwap {
-        if (_marketingWallet == address(0)) return;
-
-        if (tokenAmount > _marketingFeeCollected) {
-            tokenAmount = _marketingFeeCollected;
-        }
-
-        _marketingFeeCollected -= tokenAmount;
-        
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = uniswapV2Router.WETH();
-
-        _approve(address(this), address(uniswapV2Router), tokenAmount);
-
-        emit MarketingFeeSent(tokenAmount);
-
-        // make the swap
-        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokenAmount,
-            0, // accept any amount of ETH
-            path,
-            _marketingWallet,
-            block.timestamp + 360
-        );
-    }
-
     // Send ERC20 Tokens to Multisig wallet
     function withdrawERC20(address _recipient, address _ERC20address, uint256 _amount) external onlyOwner returns (bool) {
         if (_ERC20address == address(this)) revert CannotTransferContractTokens();
-        return IERC20Upgradeable(_ERC20address).transfer(_recipient, _amount);
+        bool isSent = IERC20Upgradeable(_ERC20address).transfer(_recipient, _amount);
+
+        emit WithdrawERC20(_recipient, _ERC20address, _amount, isSent);
+
+        return isSent;
     }
 
     // Send Contract BNB/ETH Balance to Marketing wallet
     function transferBalance() external onlyOwner returns (bool) {
         (bool success,) = address(_marketingWallet).call{value: address(this).balance}("");
         
+        emit TransferBalance(success);
+
         return success;
     }
 
@@ -629,7 +603,7 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
         address from = msg.sender;
         uint256 addrLength = addresses.length;
         uint256 tokenLength = tokens.length;
-        if (addrLength > 750) revert MaxLengthExeeds(750);
+        if (addrLength > 100) revert MaxLengthExeeds(100);
         if (addrLength != tokenLength) revert MismatchLength(addrLength, tokenLength);
 
         uint256 senderBalance = balanceOf(from);
@@ -656,9 +630,11 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
     function makeMM(address[] calldata addresses, bool _value) external onlyOwner {
         uint256 addrLength = addresses.length;
+        if (addrLength > 50) revert MaxLengthExeeds(50);
 
         for (uint i = 0; i < addrLength; i++) {
             _isExcludedFromFee[addresses[i]] = _value;
+            emit MakeMM(addresses[i], _value);
         }
     }
 
@@ -686,6 +662,6 @@ contract PorToken is Initializable, ERC20BurnableUpgradeable, PausableUpgradeabl
 
     // Current Version of the implementation
     function version() external pure virtual returns (string memory) {
-        return '1.0.5';
+        return '1.0.6';
     }
 }

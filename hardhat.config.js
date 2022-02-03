@@ -10,6 +10,7 @@ require("hardhat-gas-reporter");
 require("@nomiclabs/hardhat-etherscan"); 
 require('dotenv').config();
 require('hardhat-contract-sizer');
+require('@openzeppelin/hardhat-defender');
 
 task('accounts', 'List of accounts', async () => {
   const accounts = await ethers.getSigners();
@@ -71,5 +72,9 @@ module.exports = {
     disambiguatePaths: false,
     runOnCompile: process.env.CONTRACT_SIZER_ON_COMPILE ? true : false,
     strict: true,
+  },
+  defender: {
+    apiKey: process.env.DEFENDER_TEAM_API_KEY,
+    apiSecret: process.env.DEFENDER_TEAM_API_SECRET_KEY,
   }
 };

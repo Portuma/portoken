@@ -12,8 +12,8 @@ async function main() {
         factoryContract,
         {
             // kind: 'transparent',
-            title: 'Upgrade for V1.0.5',
-            description: 'Upgrade for V1.0.5',
+            title: 'Upgrade to V1.0.6',
+            description: 'Upgrade to V1.0.6',
             multisig: '0xd180f598c281a1B6AEa81Fc7A1268017a7D1EF5E',
             // proxyAdmin: '',
             // multisigType: 'Gnosis Multisig'
